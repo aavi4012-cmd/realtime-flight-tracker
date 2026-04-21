@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: skytrack-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: flight-tracker/backend
+    envVars:
+      - key: PORT
+        value: 3000

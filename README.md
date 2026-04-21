@@ -1,97 +1,274 @@
-# ✈️ Real-Time Flight Tracker
+#  Real-Time Flight Tracker
 
-A production-quality real-time flight tracking system built with **Node.js** (Backend) and **React Native / Expo** (Frontend). This project tracks aircraft currently in the skies over India, providing real-time position updates, altitude, velocity, and vertical movement direction.
+A real-time flight tracking system built with **Node.js (Backend)** and **React Native / Expo (Frontend)**.
+This project streams live aircraft data over India and visualizes it with smooth, real-time updates on a mobile map.
 
----
-
-## 🏗️ Architecture Overview
-
-The system follows a clean, event-driven architecture designed for scalability and low latency:
-
-1.  **Backend (Node.js)**:
-    *   **Flight Service**: Polls the OpenSky Network REST API every 10 seconds.
-    *   **Filtering Engine**: Processes raw aircraft states, filtering for active flights (airborne, specific altitude/speed thresholds) within the Indian geographic bounds.
-    *   **WebSocket Server**: Maintains persistent connections with mobile clients and broadcasts updated flight data packets every cycle.
-2.  **Frontend (React Native)**:
-    *   **Socket Service**: Manages the life-cycle of the WebSocket connection, including automatic reconnection with backoff logic.
-    *   **Map Component**: Renders a high-performance map using `react-native-maps`.
-    *   **Smooth Animations**: Coordinates are interpolated using `AnimatedRegion`, ensuring aircraft "glide" smoothly across the map between 10-second updates.
+The focus of this implementation is not just functionality, but **clean architecture, reliability, and real-time system design thinking**.
 
 ---
 
-## 🚀 Getting Started
+##  Architecture Overview
+
+The system follows a **backend-driven real-time architecture**:
+
+* Backend pulls and processes flight data
+* Backend pushes updates via WebSocket
+* Frontend passively consumes and renders updates
+
+This avoids unnecessary client polling and keeps the system efficient.
+
+---
+
+##  System Architecture (Layered View)
+
+```mermaid
+flowchart TD
+
+    subgraph External Layer
+        A[OpenSky Network API]
+    end
+
+    subgraph Data Ingestion Layer
+        B[Polling Service]
+    end
+
+    subgraph Processing Layer
+        C[Flight Filter Engine]
+        D[Data Normalization]
+    end
+
+    subgraph Real-Time Layer
+        E[WebSocket Manager]
+    end
+
+    subgraph Client Layer
+        F[Socket Client]
+        G[State Manager]
+    end
+
+    subgraph Presentation Layer
+        H[Map UI]
+        I[Flight Cards UI]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    G --> I
+```
+
+---
+
+##  Real-Time Data Flow
+
+```mermaid
+sequenceDiagram
+    participant API as OpenSky API
+    participant Backend as Node Backend
+    participant WS as WebSocket Server
+    participant Client as Mobile App
+
+    loop Every 10 seconds
+        Backend->>API: Fetch flight data
+        API-->>Backend: Raw flight states
+        Backend->>Backend: Filter + Transform
+        Backend->>WS: Broadcast updates
+        WS-->>Client: Send flight positions
+        Client->>Client: Animate markers
+    end
+```
+
+---
+
+##  Getting Started
 
 ### 1. Backend Setup
+
 ```bash
-# Navigate to backend directory
 cd flight-tracker/backend
-
-# Install dependencies
 npm install
-
-# Start the server
 npm start
 ```
-*The server will run on `http://localhost:3000` and `ws://localhost:3000`.*
+
+Runs on:
+
+```
+http://localhost:3000
+ws://localhost:3000
+```
+
+---
 
 ### 2. Frontend Setup
+
 ```bash
-# Navigate to mobile directory
 cd mobile
-
-# Install dependencies
 npm install
+npx expo start
+```
 
-# Start Expo
-npm start
+⚠️ Update WebSocket URL in frontend:
+
+```js
+ws://YOUR_LOCAL_IP:3000
 ```
 
 ---
 
-## 🛠️ Key Technical Features
+##  Key Technical Features
 
 ### Backend Flow
-1.  **Polling**: Executes every 10 seconds.
-2.  **Resilience**: Implements exponential backoff (up to 3 retries) for the flaky OpenSky API to ensure the system remains alive during intermittent downstream failures.
-3.  **Data Transformation**: Converts complex nested array structures from OpenSky into clean, typed JSON objects.
-    *   `id`: Unique ICAO24 identifier.
-    *   `direction`: Computed as `climbing`, `descending`, or `level` based on vertical rate.
-4.  **Logging**: Detailed console logging for API status, filter counts, and active client metrics.
+
+1. **Polling**
+
+   * Fetches data every 10 seconds from OpenSky API
+
+2. **Filtering Logic**
+
+   * Airborne only (`on_ground = false`)
+   * Velocity > 50 m/s
+   * Altitude > 3000m
+   * Valid latitude & longitude
+
+3. **Data Transformation**
+   Converts raw array → structured JSON:
+
+```json
+{
+  "id": "icao24",
+  "callsign": "IGO573V",
+  "position": { "lat": 22.5, "lng": 78.2 },
+  "altitude": 9500,
+  "speed": 210,
+  "vertical_rate": 5,
+  "trend": "climbing"
+}
+```
+
+4. **WebSocket Streaming**
+
+   * Maintains active connections
+   * Broadcasts updates every cycle
+   * Handles disconnects cleanly
+
+5. **Resilience**
+
+   * Retry with exponential backoff (max 3 attempts)
+   * Graceful fallback on failure
+   * Defensive null checks
+
+6. **Observability**
+
+   * Logs for:
+
+     * API fetch status
+     * filtered flight count
+     * active connections
+
+---
 
 ### Frontend Flow
-1.  **Life-cycle Hook**: Connects to the WebSocket on mount and cleans up on unmount.
-2.  **Reconnection Logic**: If the backend goes down, the mobile app shows a "Reconnecting" UI and attempts to re-establish the socket every 3 seconds.
-3.  **Cross-Platform Map View**: 
-    *   **iOS/Android**: Uses native `react-native-maps` with plane icons and callouts.
-    *   **Smooth Interpolation**: Prevents "teleporting" markers by animating position changes over 5 seconds.
-    *   **Web Fallback**: Implements `MapView.web.js` to provide a clean data dashboard, bypassing native module limitations.
-4.  **Empty States**: Clear messaging when no aircraft meet the filtering criteria.
+
+1. **WebSocket Lifecycle**
+
+   * Connect on mount
+   * Auto reconnect every 3s on failure
+
+2. **Map Rendering**
+
+   * Built using `react-native-maps`
+   * Centered over India
+   * Displays active flights
+
+3. **Smooth Animation**
+
+   * Interpolates positions instead of jumping
+   * Creates “gliding” aircraft movement
+
+4. **UI Layer**
+
+   * Displays:
+
+     * Callsign
+     * Altitude
+     * Speed
+     * Direction (↑ ↓ →)
+
+5. **UX Handling**
+
+   * Loading state
+   * Reconnecting state
+   * Empty state (no flights)
 
 ---
 
-## 🧠 Assumptions & Design Decisions
-- **OpenSky Network**: Used as the primary data source. Note that OpenSky data can be delayed by 10-20 seconds.
-- **Geographic Bounds**: Restricted to India (Lat: 8 to 37, Long: 68 to 97) to ensure high-density, relevant results.
-- **Polling Interval**: Set to 10s to balance real-timeliness with API rate limits.
-- **Dynamic Selection**: Limited to top 2 flights for clarity in demonstration, easily adjustable in `flightService.js`.
+##  Design Decisions
+
+### Why WebSockets?
+
+Polling from client leads to redundant requests.
+WebSockets allow **push-based updates**, reducing load and improving real-time experience.
 
 ---
 
-## 🛡️ Edge Cases Handled
-- **Platform Compatibility**: Uses file-based platform branching (`MapView.js` vs `MapView.web.js`) to ensure the app runs flawlessly on Web, iOS, and Android despite native-only dependencies.
-- **Downstream API Failure**: Logged and retried with backoff; empty state broadcast if fatal.
-- **WebSocket Disconnection**: Mobile app handles socket drops gracefully with automatic retry.
-- **Malformed API Data**: Null checks for Latitude/Longitude in the filtering pipe to prevent frontend crashes.
-- **No Flights**: Clean empty state UI instead of a blank map.
+### Why Backend Filtering?
+
+Keeps frontend lightweight and ensures:
+
+* consistent data
+* no duplicate logic
+* centralized validation
 
 ---
 
-## 🔮 Future Improvements
-- **Database Integration**: Store historical flight paths for "breadcrumb" trailing.
-- **Authentication**: JWT-based security for the WebSocket connection.
-- **Clustering**: Handle 100+ flights simultaneously using marker clustering.
-- **Push Notifications**: Notify users when a flight enters a specific polygon.
+### Why Limit to 2 Flights?
+
+* Improves clarity for demo
+* Avoids UI clutter
+* Easily scalable later
 
 ---
 
-**Developed for Technical Assessment** | *Clean. Modular. Production-Ready.*
+### Polling Interval (10s)
+
+Balances:
+
+* API rate limits
+* real-time perception
+
+---
+
+##  Edge Cases Handled
+
+* OpenSky API downtime
+* Empty or insufficient flight data
+* WebSocket disconnections
+* Invalid/missing coordinates
+* No active flights scenario
+
+---
+
+##  Future Improvements
+
+* Redis Pub/Sub for scaling WebSocket layer
+* Flight path history (breadcrumb trails)
+* Marker clustering for high density
+* JWT authentication for secure connections
+* Geofencing alerts for flight regions
+
+---
+
+##  What This Project Demonstrates
+
+* Real-time system design fundamentals
+* Handling unreliable third-party APIs
+* WebSocket-based streaming architecture
+* Clean separation of backend and frontend
+* Focus on reliability over just “working code”
+
+
+**Backend-driven • Real-time • Fault-aware • Production-oriented**
